@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>TaskFlow · Планнер</title>
+<style>
+/* ═══ RESET & TOKENS ══════════════════════════════════════════════════════ */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --p1:#7c3aed;--p2:#4f46e5;--p3:#3b82f6;--p4:#a855f7;
+  --bg-g:radial-gradient(ellipse at top,#1e0a3c 0%,#0a0520 40%,#050210 100%);
+  --glass:rgba(255,255,255,.06);--glass-strong:rgba(255,255,255,.1);
+  --glass-border:rgba(255,255,255,.1);
+  --text:#f5f3ff;--muted:rgba(245,243,255,.55);--subtle:rgba(245,243,255,.3);
+  --task:#6366f1;--deadline:#ef4444;--meeting:#a855f7;--done:#22c55e;
+  --radius:20px;--radius-sm:14px;--radius-xs:10px;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+html,body{
+  height:100%;width:100%;overflow:hidden;
+  background:#050210;color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif;
+  font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;
+}
+body::before{
+  content:'';position:fixed;inset:0;z-index:-1;
+  background:var(--bg-g);
+}
+body::after{
+  content:'';position:fixed;inset:0;z-index:-1;
+  background:
+    radial-gradient(circle at 20% 10%,rgba(124,58,237,.25),transparent 40%),
+    radial-gradient(circle at 80% 90%,rgba(59,130,246,.22),transparent 45%);
+  animation:drift 20s ease-in-out infinite alternate;
+}
+@keyframes drift{0%{transform:translate(0,0)}100%{transform:translate(20px,-20px)}}
+
+#bg{position:fixed;inset:0;z-index:0;pointer-events:none}
+
+/* ═══ SCREENS ═════════════════════════════════════════════════════════════ */
+.screen{
+  position:fixed;inset:0;z-index:1;
+  padding-top:calc(var(--safe-top) + 8px);
+  padding-bottom:calc(var(--safe-bot) + 84px);
+  overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  opacity:0;pointer-events:none;
+  transform:translateX(30px) scale(.98);
+  transition:opacity .3s cubic-bezier(.4,0,.2,1),transform .3s cubic-bezier(.4,0,.2,1);
+}
+.screen.active{opacity:1;pointer-events:all;transform:none}
+.screen::-webkit-scrollbar{display:none}
+
+/* ═══ GLASS ═══════════════════════════════════════════════════════════════ */
+.glass{
+  background:var(--glass);border:1px solid var(--glass-border);
+  backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);
+}
+
+/* ═══ HEADER ══════════════════════════════════════════════════════════════ */
+.top{padding:14px 20px 8px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.top-greeting{font-size:12px;color:var(--muted);margin-bottom:2px}
+.top-name{font-size:20px;font-weight:800;letter-spacing:-.5px;
+  background:linear-gradient(90deg,#e9d5ff 0%,#bfdbfe 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.avatar{
+  width:42px;height:42px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,var(--p1),var(--p3));
+  display:flex;align-items:center;justify-content:center;font-size:18px;
+  box-shadow:0 0 20px rgba(124,58,237,.4);
+}
+
+/* ═══ HOME: STATS ═════════════════════════════════════════════════════════ */
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px 16px 16px}
+.stat{
+  padding:14px 14px;border-radius:var(--radius-sm);
+  background:var(--glass);border:1px solid var(--glass-border);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  position:relative;overflow:hidden;
+}
+.stat-icon{font-size:18px;margin-bottom:6px;opacity:.9}
+.stat-num{font-size:22px;font-weight:800;letter-spacing:-.5px;line-height:1}
+.stat-label{font-size:10px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+.stat.today{background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(99,102,241,.12))}
+.stat.done{background:linear-gradient(135deg,rgba(34,197,94,.2),rgba(16,185,129,.08))}
+.stat.upcoming{background:linear-gradient(135deg,rgba(59,130,246,.22),rgba(168,85,247,.1))}
+
+/* ═══ HERO SECTION (featured task) ═══════════════════════════════════════ */
+.section-head{padding:4px 20px 10px;display:flex;align-items:center;justify-content:space-between}
+.section-title{font-size:16px;font-weight:700;letter-spacing:-.3px}
+.section-action{font-size:12px;color:#c4b5fd;font-weight:500;cursor:pointer}
+
+/* ═══ TASK CARDS ══════════════════════════════════════════════════════════ */
+.task-list{padding:0 16px 8px;display:flex;flex-direction:column;gap:8px}
+.task{
+  padding:14px 16px;border-radius:var(--radius-sm);
+  background:var(--glass);border:1px solid var(--glass-border);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  display:flex;align-items:flex-start;gap:12px;
+  cursor:pointer;position:relative;overflow:hidden;
+  transition:transform .15s,background .15s;
+  -webkit-user-select:none;user-select:none;
+}
+.task:active{transform:scale(.98);background:var(--glass-strong)}
+.task.done{opacity:.5}
+.task.done .task-text{text-decoration:line-through}
+
+.task-check{
+  width:22px;height:22px;border-radius:7px;flex-shrink:0;
+  border:2px solid var(--glass-border);
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;color:transparent;
+  transition:all .2s;cursor:pointer;
+}
+.task-check:active{transform:scale(.9)}
+.task.done .task-check{background:var(--done);border-color:var(--done);color:#fff}
+
+.task-bar{
+  position:absolute;left:0;top:0;bottom:0;width:3px;
+}
+.task-bar.task{background:var(--task)}
+.task-bar.deadline{background:var(--deadline)}
+.task-bar.meeting{background:var(--meeting)}
+
+.task-body{flex:1;min-width:0}
+.task-text{font-size:14px;font-weight:500;line-height:1.35;word-break:break-word}
+.task-meta{display:flex;align-items:center;gap:6px;margin-top:5px;flex-wrap:wrap}
+.chip{
+  font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;
+  text-transform:uppercase;letter-spacing:.04em;
+}
+.chip.task{background:rgba(99,102,241,.2);color:#a5b4fc}
+.chip.deadline{background:rgba(239,68,68,.2);color:#fca5a5}
+.chip.meeting{background:rgba(168,85,247,.2);color:#d8b4fe}
+.task-time{font-size:11px;color:var(--muted)}
+.task-time.overdue{color:#fca5a5;font-weight:600}
+.task-time.soon{color:#fcd34d;font-weight:600}
+
+.task-more{
+  width:28px;height:28px;border-radius:8px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;color:var(--muted);
+}
+
+/* ═══ FAB ═════════════════════════════════════════════════════════════════ */
+.fab{
+  position:fixed;right:20px;z-index:15;
+  bottom:calc(96px + var(--safe-bot));
+  width:58px;height:58px;border-radius:50%;
+  background:linear-gradient(135deg,var(--p1),var(--p2));
+  color:#fff;border:none;font-size:26px;font-weight:300;
+  box-shadow:0 8px 24px rgba(124,58,237,.5),0 0 0 1px rgba(255,255,255,.1) inset;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:transform .2s;
+}
+.fab:active{transform:scale(.92)}
+
+/* ═══ EMPTY STATE ═════════════════════════════════════════════════════════ */
+.empty{
+  padding:48px 32px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+}
+.empty-ico{font-size:44px;margin-bottom:4px;opacity:.6}
+.empty-title{font-size:15px;font-weight:600}
+.empty-sub{font-size:13px;color:var(--muted);max-width:260px}
+
+/* ═══ CALENDAR ════════════════════════════════════════════════════════════ */
+.cal-wrap{padding:8px 16px 12px}
+.cal-nav{display:flex;align-items:center;justify-content:space-between;padding:6px 4px 14px}
+.cal-nav-btn{
+  width:36px;height:36px;border-radius:50%;
+  background:var(--glass);border:1px solid var(--glass-border);
+  color:var(--text);font-size:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s;
+}
+.cal-nav-btn:active{background:var(--glass-strong)}
+.cal-title{font-size:17px;font-weight:700;letter-spacing:-.3px}
+
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-dow{text-align:center;font-size:10px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.06em;padding:4px 0 6px}
+.cal-cell{
+  aspect-ratio:1;border-radius:10px;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+  padding:6px 3px 4px;cursor:pointer;
+  border:1px solid transparent;
+  transition:background .15s,border-color .15s;position:relative;
+}
+.cal-cell:active{background:var(--glass)}
+.cal-cell.today{
+  border-color:var(--p1);
+  background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(99,102,241,.12));
+}
+.cal-cell.selected{
+  background:linear-gradient(135deg,var(--p1),var(--p2));
+  border-color:transparent;
+  box-shadow:0 4px 14px rgba(124,58,237,.4);
+}
+.cal-cell.other .day-num{color:rgba(255,255,255,.18)}
+.day-num{font-size:13px;font-weight:600;line-height:1}
+.cal-cell.selected .day-num{color:#fff;font-weight:700}
+.day-dots{display:flex;gap:2px;margin-top:4px;justify-content:center}
+.dot{width:4px;height:4px;border-radius:50%}
+.dot.task{background:var(--task)}
+.dot.deadline{background:var(--deadline)}
+.dot.meeting{background:var(--meeting)}
+.cal-cell.selected .dot{background:#fff !important;opacity:.9}
+
+.legend{
+  display:flex;gap:14px;justify-content:center;padding:8px 16px 16px;flex-wrap:wrap;
+}
+.leg{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.leg-dot{width:8px;height:8px;border-radius:50%}
+.leg-dot.task{background:var(--task)}
+.leg-dot.deadline{background:var(--deadline)}
+.leg-dot.meeting{background:var(--meeting)}
+
+.day-tasks-head{padding:8px 20px 10px;font-size:14px;font-weight:700}
+
+/* ═══ FILTER TABS (all tasks) ════════════════════════════════════════════ */
+.filter-row{display:flex;gap:8px;padding:4px 16px 14px;overflow-x:auto;scrollbar-width:none}
+.filter-row::-webkit-scrollbar{display:none}
+.filter{
+  padding:7px 14px;border-radius:20px;
+  font-size:12px;font-weight:600;white-space:nowrap;
+  background:var(--glass);border:1px solid var(--glass-border);
+  color:var(--muted);cursor:pointer;flex-shrink:0;
+  transition:all .15s;
+}
+.filter.active{
+  background:linear-gradient(135deg,var(--p1),var(--p2));
+  border-color:transparent;color:#fff;
+  box-shadow:0 4px 12px rgba(124,58,237,.35);
+}
+
+/* ═══ ADD SCREEN ══════════════════════════════════════════════════════════ */
+#add{padding-bottom:calc(var(--safe-bot) + 24px)}
+.add-head{padding:18px 20px 8px;font-size:22px;font-weight:800;letter-spacing:-.5px}
+.add-sub{padding:0 20px 20px;color:var(--muted);font-size:13px}
+
+.input-wrap{padding:0 16px 14px}
+.input-label{font-size:11px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;padding-left:4px}
+.input{
+  width:100%;padding:14px 16px;
+  background:var(--glass);border:1px solid var(--glass-border);
+  color:var(--text);font-size:15px;font-family:inherit;
+  border-radius:var(--radius-sm);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  outline:none;transition:border-color .15s,background .15s;
+}
+.input:focus{border-color:var(--p1);background:var(--glass-strong)}
+.input::placeholder{color:var(--subtle)}
+textarea.input{resize:none;min-height:80px;line-height:1.4}
+
+.type-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 16px 14px}
+.type-opt{
+  padding:14px 8px;border-radius:var(--radius-sm);
+  background:var(--glass);border:1px solid var(--glass-border);
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  cursor:pointer;transition:all .15s;
+}
+.type-opt:active{transform:scale(.97)}
+.type-opt.selected{border-color:transparent}
+.type-opt.selected.task{background:linear-gradient(135deg,rgba(99,102,241,.4),rgba(79,70,229,.2));border-color:var(--task)}
+.type-opt.selected.deadline{background:linear-gradient(135deg,rgba(239,68,68,.4),rgba(220,38,38,.2));border-color:var(--deadline)}
+.type-opt.selected.meeting{background:linear-gradient(135deg,rgba(168,85,247,.4),rgba(147,51,234,.2));border-color:var(--meeting)}
+.type-ico{font-size:22px}
+.type-label{font-size:12px;font-weight:600}
+
+.quick-dates{display:flex;gap:6px;padding:0 16px 14px;flex-wrap:wrap}
+.qd{
+  padding:7px 12px;border-radius:20px;font-size:12px;font-weight:500;
+  background:var(--glass);border:1px solid var(--glass-border);
+  color:var(--text);cursor:pointer;transition:all .15s;
+}
+.qd:active{background:var(--glass-strong)}
+.qd.active{background:var(--p1);border-color:var(--p1)}
+
+.save-row{padding:20px 16px 0;display:flex;gap:10px}
+.btn-save{
+  flex:1;padding:15px;border-radius:var(--radius-sm);
+  background:linear-gradient(135deg,var(--p1),var(--p2));
+  color:#fff;border:none;font-size:15px;font-weight:700;
+  cursor:pointer;
+  box-shadow:0 6px 20px rgba(124,58,237,.4);
+  transition:transform .15s,box-shadow .15s;
+}
+.btn-save:active{transform:scale(.97);box-shadow:0 3px 10px rgba(124,58,237,.3)}
+.btn-cancel{
+  padding:15px 22px;border-radius:var(--radius-sm);
+  background:var(--glass);border:1px solid var(--glass-border);
+  color:var(--text);font-size:14px;font-weight:600;cursor:pointer;
+}
+
+/* ═══ BOTTOM NAV ══════════════════════════════════════════════════════════ */
+.bnav{
+  position:fixed;bottom:0;left:0;right:0;z-index:10;
+  padding:8px 10px calc(10px + var(--safe-bot));
+  background:rgba(8,3,22,.88);
+  border-top:1px solid var(--glass-border);
+  backdrop-filter:blur(30px) saturate(180%);-webkit-backdrop-filter:blur(30px) saturate(180%);
+  display:flex;justify-content:space-around;
+}
+.nav-item{
+  flex:1;padding:6px 8px;border-radius:14px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  -webkit-user-select:none;user-select:none;
+  transition:background .15s;
+}
+.nav-item:active{background:var(--glass)}
+.nav-ico{font-size:20px;line-height:1;filter:grayscale(1) opacity(.45);transition:filter .2s,transform .2s}
+.nav-txt{font-size:10px;color:var(--subtle);font-weight:500;transition:color .2s}
+.nav-item.active .nav-ico{filter:none;transform:scale(1.15) translateY(-1px)}
+.nav-item.active .nav-txt{color:#c4b5fd;font-weight:600}
+
+/* ═══ TOAST ═══════════════════════════════════════════════════════════════ */
+.toast{
+  position:fixed;top:calc(var(--safe-top) + 20px);left:50%;z-index:999;
+  transform:translate(-50%,-120px);
+  background:rgba(30,15,60,.95);border:1px solid rgba(196,181,253,.2);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  color:#fff;font-size:13px;font-weight:500;padding:12px 22px;
+  border-radius:30px;white-space:nowrap;
+  box-shadow:0 12px 40px rgba(0,0,0,.5);
+  transition:transform .35s cubic-bezier(.34,1.56,.64,1);
+}
+.toast.show{transform:translate(-50%,0)}
+
+/* ═══ BOTTOM SHEET (task detail) ═════════════════════════════════════════ */
+.sheet-mask{
+  position:fixed;inset:0;z-index:50;
+  background:rgba(0,0,0,.6);backdrop-filter:blur(4px);
+  opacity:0;pointer-events:none;transition:opacity .25s;
+}
+.sheet-mask.open{opacity:1;pointer-events:all}
+.sheet{
+  position:fixed;bottom:0;left:0;right:0;z-index:51;
+  background:linear-gradient(180deg,#1a0b3e 0%,#0d0626 100%);
+  border-top:1px solid var(--glass-border);
+  border-radius:24px 24px 0 0;
+  padding:18px 20px calc(24px + var(--safe-bot));
+  transform:translateY(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);
+  box-shadow:0 -12px 40px rgba(0,0,0,.5);
+}
+.sheet.open{transform:translateY(0)}
+.sheet-grip{width:44px;height:4px;border-radius:2px;background:rgba(255,255,255,.2);margin:0 auto 16px}
+.sheet-title{font-size:17px;font-weight:700;margin-bottom:4px;word-break:break-word}
+.sheet-meta{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.sheet-row{display:flex;gap:10px}
+.sheet-btn{
+  flex:1;padding:12px;border-radius:var(--radius-sm);
+  font-size:14px;font-weight:600;cursor:pointer;border:none;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.sheet-btn.primary{background:linear-gradient(135deg,var(--done),#16a34a);color:#fff;
+  box-shadow:0 4px 14px rgba(34,197,94,.35)}
+.sheet-btn.danger{background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.25)}
+.sheet-btn.ghost{background:var(--glass);color:var(--text);border:1px solid var(--glass-border)}
+</style>
+</head>
+<body>
+
+<canvas id="bg"></canvas>
+
+<!-- ═══════════════ HOME ═══════════════ -->
+<div class="screen active" id="home">
+  <div class="top">
+    <div>
+      <div class="top-greeting" id="greet">Доброе утро</div>
+      <div class="top-name">TaskFlow</div>
+    </div>
+    <div class="avatar">✨</div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat today">
+      <div class="stat-icon">📅</div>
+      <div class="stat-num" id="stat-today">0</div>
+      <div class="stat-label">Сегодня</div>
+    </div>
+    <div class="stat upcoming">
+      <div class="stat-icon">🔮</div>
+      <div class="stat-num" id="stat-upcoming">0</div>
+      <div class="stat-label">Скоро</div>
+    </div>
+    <div class="stat done">
+      <div class="stat-icon">✅</div>
+      <div class="stat-num" id="stat-done">0</div>
+      <div class="stat-label">Готово</div>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <div class="section-title">На сегодня</div>
+    <div class="section-action" onclick="nav('all')">Все →</div>
+  </div>
+  <div id="home-today" class="task-list"></div>
+
+  <div class="section-head" style="margin-top:8px">
+    <div class="section-title">Ближайшие</div>
+  </div>
+  <div id="home-upcoming" class="task-list"></div>
+</div>
+
+<!-- ═══════════════ CALENDAR ═══════════════ -->
+<div class="screen" id="cal">
+  <div class="top">
+    <div>
+      <div class="top-greeting">Обзор</div>
+      <div class="top-name">Календарь</div>
+    </div>
+  </div>
+
+  <div class="cal-wrap">
+    <div class="cal-nav">
+      <button class="cal-nav-btn" onclick="shiftMonth(-1)">‹</button>
+      <div class="cal-title" id="cal-title"></div>
+      <button class="cal-nav-btn" onclick="shiftMonth(1)">›</button>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+  </div>
+
+  <div class="legend">
+    <div class="leg"><div class="leg-dot task"></div>Задача</div>
+    <div class="leg"><div class="leg-dot deadline"></div>Дедлайн</div>
+    <div class="leg"><div class="leg-dot meeting"></div>Встреча</div>
+  </div>
+
+  <div class="day-tasks-head" id="day-tasks-head"></div>
+  <div id="day-tasks" class="task-list"></div>
+</div>
+
+<!-- ═══════════════ ALL TASKS ═══════════════ -->
+<div class="screen" id="all">
+  <div class="top">
+    <div>
+      <div class="top-greeting">Список</div>
+      <div class="top-name">Все задачи</div>
+    </div>
+  </div>
+
+  <div class="filter-row">
+    <div class="filter active" onclick="setFilter('all',this)">Все</div>
+    <div class="filter" onclick="setFilter('task',this)">📌 Задачи</div>
+    <div class="filter" onclick="setFilter('deadline',this)">🔴 Дедлайны</div>
+    <div class="filter" onclick="setFilter('meeting',this)">🟣 Встречи</div>
+    <div class="filter" onclick="setFilter('done',this)">✅ Готово</div>
+  </div>
+
+  <div id="all-list" class="task-list"></div>
+</div>
+
+<!-- ═══════════════ ADD ═══════════════ -->
+<div class="screen" id="add">
+  <div class="add-head">Новая задача</div>
+  <div class="add-sub">Заполни или диктуй боту — распознает дату сам</div>
+
+  <div class="input-wrap">
+    <div class="input-label">Что нужно сделать?</div>
+    <textarea class="input" id="in-text" placeholder="Например: Позвонить Алексу по проекту"></textarea>
+  </div>
+
+  <div class="input-wrap">
+    <div class="input-label">Тип</div>
+    <div class="type-picker">
+      <div class="type-opt task selected" data-type="task" onclick="pickType(this,'task')">
+        <div class="type-ico">📌</div>
+        <div class="type-label">Задача</div>
+      </div>
+      <div class="type-opt deadline" data-type="deadline" onclick="pickType(this,'deadline')">
+        <div class="type-ico">🔴</div>
+        <div class="type-label">Дедлайн</div>
+      </div>
+      <div class="type-opt meeting" data-type="meeting" onclick="pickType(this,'meeting')">
+        <div class="type-ico">🟣</div>
+        <div class="type-label">Встреча</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="input-wrap">
+    <div class="input-label">Когда?</div>
+    <div class="quick-dates">
+      <div class="qd" onclick="pickDate(this,0)">Сегодня</div>
+      <div class="qd" onclick="pickDate(this,1)">Завтра</div>
+      <div class="qd" onclick="pickDate(this,2)">Послезавтра</div>
+      <div class="qd" onclick="pickDate(this,7)">+7 дней</div>
+      <div class="qd active" onclick="pickDate(this,null)">Без даты</div>
+    </div>
+    <input class="input" type="time" id="in-time" value="12:00" style="margin-top:8px"/>
+  </div>
+
+  <div class="save-row">
+    <button class="btn-cancel" onclick="nav('home')">Отмена</button>
+    <button class="btn-save" onclick="saveTask()">Сохранить</button>
+  </div>
+</div>
+
+<!-- ═══════════════ FAB ═══════════════ -->
+<button class="fab" id="fab" onclick="nav('add')">+</button>
+
+<!-- ═══════════════ BOTTOM NAV ═══════════════ -->
+<nav class="bnav">
+  <div class="nav-item active" id="nav-home" onclick="nav('home')">
+    <div class="nav-ico">🏠</div><div class="nav-txt">Главная</div>
+  </div>
+  <div class="nav-item" id="nav-cal" onclick="nav('cal')">
+    <div class="nav-ico">📅</div><div class="nav-txt">Календарь</div>
+  </div>
+  <div class="nav-item" id="nav-all" onclick="nav('all')">
+    <div class="nav-ico">📋</div><div class="nav-txt">Список</div>
+  </div>
+  <div class="nav-item" id="nav-add" onclick="nav('add')">
+    <div class="nav-ico">➕</div><div class="nav-txt">Добавить</div>
+  </div>
+</nav>
+
+<!-- ═══════════════ TOAST ═══════════════ -->
+<div class="toast" id="toast"></div>
+
+<!-- ═══════════════ BOTTOM SHEET ═══════════════ -->
+<div class="sheet-mask" id="sheet-mask" onclick="closeSheet()"></div>
+<div class="sheet" id="sheet">
+  <div class="sheet-grip"></div>
+  <div class="sheet-title" id="sheet-title"></div>
+  <div class="sheet-meta" id="sheet-meta"></div>
+  <div class="sheet-row">
+    <button class="sheet-btn primary" id="sheet-done-btn" onclick="sheetDone()">✓ Готово</button>
+    <button class="sheet-btn ghost" onclick="closeSheet()">Отмена</button>
+  </div>
+  <div class="sheet-row" style="margin-top:10px">
+    <button class="sheet-btn danger" onclick="sheetDelete()">🗑 Удалить</button>
+  </div>
+</div>
+
+<script>
+// ═══ TELEGRAM SDK ═══════════════════════════════════════════════════════════
+const tg = window.Telegram?.WebApp;
+if(tg){
+  tg.ready(); tg.expand();
+  tg.setHeaderColor('#0a0520');
+  tg.setBackgroundColor('#050210');
+  tg.disableVerticalSwipes?.();
+}
+const haptic = (t='light')=>tg?.HapticFeedback?.impactOccurred(t);
+const hSel = ()=>tg?.HapticFeedback?.selectionChanged();
+const hNotify = (t='success')=>tg?.HapticFeedback?.notificationOccurred(t);
+
+// ═══ STATE ═════════════════════════════════════════════════════════════════
+let tasks = [];
+let currentScreen = 'home';
+let calDate = new Date();
+let selectedDay = new Date();
+let filter = 'all';
+let newTaskType = 'task';
+let newTaskOffset = null;
+let activeSheetTask = null;
+
+const MONTHS=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const MONTHS_SHORT=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+const DOW=['ПН','ВТ','СР','ЧТ','ПТ','СБ','ВС'];
+
+// ═══ DEMO DATA (replace with API call) ═════════════════════════════════════
+function loadDemo(){
+  const today = new Date();
+  const d=(off,h=12,m=0)=>{const x=new Date(today);x.setDate(x.getDate()+off);x.setHours(h,m,0,0);return x.toISOString().slice(0,16)}
+  tasks=[
+    {id:1,text:'Созвон с командой по Q2',type:'meeting',due:d(0,11,0),done:0,dur:30},
+    {id:2,text:'Подготовить презентацию',type:'task',due:d(0,16,0),done:0},
+    {id:3,text:'Сдать отчёт по проекту',type:'deadline',due:d(1,18,0),done:0},
+    {id:4,text:'Созвон с клиентом',type:'meeting',due:d(2,14,30),done:0,dur:45},
+    {id:5,text:'Обновить резюме',type:'task',due:null,done:0},
+    {id:6,text:'Оплатить подписки',type:'deadline',due:d(3,12,0),done:0},
+    {id:7,text:'1:1 с руководителем',type:'meeting',due:d(4,10,0),done:0,dur:30},
+    {id:8,text:'Прочитать книгу',type:'task',due:d(7,9,0),done:0},
+    {id:9,text:'Купить подарок маме',type:'task',due:d(-1,10,0),done:1},
+    {id:10,text:'Финальный ревью кода',type:'deadline',due:d(5,17,0),done:0},
+  ];
+}
+
+async function loadTasks(){
+  const params = new URLSearchParams(location.search);
+  const uid = params.get('uid'), api = params.get('api');
+  if(uid && api){
+    try{
+      const res = await fetch(`${api}/tasks?uid=${uid}`);
+      tasks = await res.json();
+      return;
+    }catch(e){ console.warn('API failed, demo mode',e); }
+  }
+  loadDemo();
+}
+
+// ═══ NAVIGATION ════════════════════════════════════════════════════════════
+function nav(id){
+  if(id===currentScreen) return;
+  hSel();
+  const prev=document.getElementById(currentScreen);
+  const next=document.getElementById(id);
+  prev.classList.remove('active');
+  next.classList.add('active');
+  currentScreen=id;
+
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('nav-'+id)?.classList.add('active');
+
+  document.getElementById('fab').style.display = (id==='add')?'none':'flex';
+
+  if(id!=='home'){ tg?.BackButton?.show(); tg?.BackButton?.onClick(backHome); }
+  else tg?.BackButton?.hide();
+
+  if(id==='cal') renderCalendar();
+  if(id==='all') renderAll();
+  if(id==='home') renderHome();
+}
+function backHome(){ nav('home'); tg?.BackButton?.offClick(backHome); }
+
+// ═══ HOME ═════════════════════════════════════════════════════════════════
+function renderHome(){
+  const today = new Date();
+  const todayKey = ymd(today);
+  const todayT = tasks.filter(t=>!t.done && t.due && t.due.startsWith(todayKey));
+  const undated = tasks.filter(t=>!t.done && !t.due);
+  const doneCount = tasks.filter(t=>t.done).length;
+  const upcoming = tasks.filter(t=>{
+    if(t.done||!t.due) return false;
+    const d=new Date(t.due);
+    return d > today && d.getTime() < today.getTime()+7*86400000 && !t.due.startsWith(todayKey);
+  }).sort((a,b)=>a.due.localeCompare(b.due));
+
+  document.getElementById('stat-today').textContent = todayT.length;
+  document.getElementById('stat-upcoming').textContent = upcoming.length;
+  document.getElementById('stat-done').textContent = doneCount;
+
+  // Greeting based on hour
+  const h=today.getHours();
+  const greet = h<6?'Доброй ночи':h<12?'Доброе утро':h<18?'Добрый день':'Добрый вечер';
+  document.getElementById('greet').textContent = greet;
+
+  const todayList = [...todayT, ...undated.slice(0,3)];
+  const el1 = document.getElementById('home-today');
+  if(!todayList.length){
+    el1.innerHTML = emptyState('✨','Всё под контролем','На сегодня задач нет. Добавь новую?');
+  } else {
+    el1.innerHTML = todayList.map(taskCard).join('');
+  }
+
+  const el2 = document.getElementById('home-upcoming');
+  if(!upcoming.length){
+    el2.innerHTML = `<div style="padding:0 20px;color:var(--muted);font-size:13px">Ничего в ближайшие 7 дней</div>`;
+  } else {
+    el2.innerHTML = upcoming.slice(0,5).map(taskCard).join('');
+  }
+}
+
+// ═══ CALENDAR ══════════════════════════════════════════════════════════════
+function byDay(){
+  const m={};
+  for(const t of tasks){
+    if(!t.due||t.done) continue;
+    const k = t.due.slice(0,10);
+    (m[k]=m[k]||[]).push(t);
+  }
+  return m;
+}
+
+function renderCalendar(){
+  const y = calDate.getFullYear();
+  const m = calDate.getMonth();
+  document.getElementById('cal-title').textContent = `${MONTHS[m]} ${y}`;
+
+  const map = byDay();
+  const g = document.getElementById('cal-grid');
+  g.innerHTML = DOW.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+
+  const first = new Date(y,m,1);
+  const last = new Date(y,m+1,0);
+  const startDay = (first.getDay()+6)%7; // Mon=0
+
+  for(let i=0;i<startDay;i++){
+    const d = new Date(y,m,-startDay+i+1);
+    g.appendChild(cell(d,true,map));
+  }
+  for(let d=1;d<=last.getDate();d++){
+    g.appendChild(cell(new Date(y,m,d),false,map));
+  }
+  const rem = (7-((startDay+last.getDate())%7))%7;
+  for(let i=1;i<=rem;i++) g.appendChild(cell(new Date(y,m+1,i),true,map));
+
+  renderDayTasks();
+}
+
+function cell(date, other, map){
+  const el = document.createElement('div');
+  el.className='cal-cell'+(other?' other':'');
+  const today=new Date();
+  const isToday = !other && date.toDateString()===today.toDateString();
+  const isSel = date.toDateString()===selectedDay.toDateString();
+  if(isToday) el.classList.add('today');
+  if(isSel) el.classList.add('selected');
+
+  const n = document.createElement('div');
+  n.className='day-num'; n.textContent=date.getDate();
+  el.appendChild(n);
+
+  const k = ymd(date);
+  const t = map[k]||[];
+  if(t.length){
+    const dots=document.createElement('div');
+    dots.className='day-dots';
+    const seen=new Set();
+    for(const x of t){
+      if(seen.has(x.type)) continue;
+      seen.add(x.type);
+      const dot=document.createElement('div');
+      dot.className='dot '+x.type;
+      dots.appendChild(dot);
+    }
+    el.appendChild(dots);
+  }
+
+  el.onclick=()=>{
+    hSel();
+    if(other){ calDate=new Date(date.getFullYear(),date.getMonth(),1); }
+    selectedDay=new Date(date);
+    renderCalendar();
+  };
+  return el;
+}
+
+function renderDayTasks(){
+  const k = ymd(selectedDay);
+  const t = tasks.filter(x=>x.due && x.due.startsWith(k)).sort((a,b)=>a.due.localeCompare(b.due));
+  const head = document.getElementById('day-tasks-head');
+  head.textContent = `${selectedDay.getDate()} ${MONTHS_SHORT[selectedDay.getMonth()]} · ${t.length} задач`;
+  const list = document.getElementById('day-tasks');
+  if(!t.length) list.innerHTML = emptyState('🌙','Свободный день','Никаких задач на этот день');
+  else list.innerHTML = t.map(taskCard).join('');
+}
+
+function shiftMonth(d){ haptic(); calDate.setMonth(calDate.getMonth()+d); renderCalendar(); }
+
+// ═══ ALL TASKS ═════════════════════════════════════════════════════════════
+function setFilter(f,el){
+  hSel();
+  filter=f;
+  document.querySelectorAll('.filter').forEach(x=>x.classList.remove('active'));
+  el.classList.add('active');
+  renderAll();
+}
+
+function renderAll(){
+  let list;
+  if(filter==='all') list = tasks.filter(t=>!t.done);
+  else if(filter==='done') list = tasks.filter(t=>t.done);
+  else list = tasks.filter(t=>!t.done && t.type===filter);
+  list.sort((a,b)=>{
+    if(!a.due && !b.due) return 0;
+    if(!a.due) return 1;
+    if(!b.due) return -1;
+    return a.due.localeCompare(b.due);
+  });
+  const el = document.getElementById('all-list');
+  if(!list.length) el.innerHTML = emptyState('🎯','Пусто','Нет задач в этой категории');
+  else el.innerHTML = list.map(taskCard).join('');
+}
+
+// ═══ TASK CARD ═════════════════════════════════════════════════════════════
+function taskCard(t){
+  return `<div class="task ${t.done?'done':''}" onclick="openSheet(${t.id})">
+    <div class="task-bar ${t.type}"></div>
+    <div class="task-check" onclick="event.stopPropagation();toggleDone(${t.id})">${t.done?'✓':''}</div>
+    <div class="task-body">
+      <div class="task-text">${esc(t.text)}</div>
+      <div class="task-meta">
+        <span class="chip ${t.type}">${typeLabel(t.type)}${t.dur?' · '+t.dur+'м':''}</span>
+        ${fmtDue(t.due)}
+      </div>
+    </div>
+    <div class="task-more">⋯</div>
+  </div>`;
+}
+
+function typeLabel(t){return {task:'Задача',deadline:'Дедлайн',meeting:'Встреча'}[t]||t}
+
+function fmtDue(iso){
+  if(!iso) return '';
+  const d=new Date(iso), now=new Date();
+  const diff=d-now, mins=Math.round(diff/60000);
+  let cls='',label;
+  if(mins<0){ cls='overdue'; label = Math.abs(mins)<60?`${-mins}м назад`:Math.abs(mins)<1440?`${Math.round(-mins/60)}ч назад`:`${Math.round(-mins/1440)}д назад` }
+  else if(mins<60){ cls='soon'; label=`через ${mins}м` }
+  else if(mins<1440){ cls='soon'; label=`через ${Math.round(mins/60)}ч` }
+  else {
+    label=d.toLocaleDateString('ru',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'});
+  }
+  return `<span class="task-time ${cls}">⏰ ${label}</span>`;
+}
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function emptyState(ico,title,sub){
+  return `<div class="empty"><div class="empty-ico">${ico}</div><div class="empty-title">${title}</div><div class="empty-sub">${sub}</div></div>`;
+}
+
+function ymd(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+
+// ═══ ACTIONS ═══════════════════════════════════════════════════════════════
+function toggleDone(id){
+  haptic('medium');
+  const t = tasks.find(x=>x.id===id);
+  if(!t) return;
+  t.done = t.done?0:1;
+  hNotify(t.done?'success':'warning');
+  syncAction(id, t.done?'done':'undone');
+  refreshAll();
+  if(t.done) toast('✅ Задача выполнена');
+}
+
+function syncAction(id,action){
+  const params = new URLSearchParams(location.search);
+  const uid = params.get('uid'), api = params.get('api');
+  if(uid && api){
+    fetch(`${api}/tasks/${id}/${action}`,{method:'POST',body:JSON.stringify({uid})}).catch(()=>{});
+  }
+}
+
+function refreshAll(){
+  if(currentScreen==='home') renderHome();
+  else if(currentScreen==='cal') renderDayTasks();
+  else if(currentScreen==='all') renderAll();
+}
+
+// ═══ BOTTOM SHEET ══════════════════════════════════════════════════════════
+function openSheet(id){
+  haptic();
+  const t = tasks.find(x=>x.id===id);
+  if(!t) return;
+  activeSheetTask = t;
+  document.getElementById('sheet-title').textContent = t.text;
+  document.getElementById('sheet-meta').innerHTML =
+    `<span class="chip ${t.type}">${typeLabel(t.type)}</span>` +
+    (t.due?fmtDue(t.due):`<span class="task-time">Без даты</span>`);
+  document.getElementById('sheet-done-btn').innerHTML = t.done?'↺ Вернуть':'✓ Готово';
+  document.getElementById('sheet-mask').classList.add('open');
+  document.getElementById('sheet').classList.add('open');
+}
+function closeSheet(){
+  hSel();
+  document.getElementById('sheet-mask').classList.remove('open');
+  document.getElementById('sheet').classList.remove('open');
+  activeSheetTask = null;
+}
+function sheetDone(){
+  if(!activeSheetTask) return;
+  toggleDone(activeSheetTask.id);
+  closeSheet();
+}
+function sheetDelete(){
+  if(!activeSheetTask) return;
+  haptic('heavy');
+  tg?.showPopup?.({
+    title:'Удалить задачу?',
+    message:'Действие нельзя отменить',
+    buttons:[{type:'destructive',text:'Удалить',id:'yes'},{type:'cancel'}]
+  },id=>{
+    if(id==='yes'){
+      syncAction(activeSheetTask.id,'delete');
+      tasks = tasks.filter(t=>t.id!==activeSheetTask.id);
+      refreshAll();
+      closeSheet();
+      toast('🗑 Задача удалена');
+    }
+  }) || (()=>{ // fallback when showPopup not available
+    if(confirm('Удалить задачу?')){
+      tasks = tasks.filter(t=>t.id!==activeSheetTask.id);
+      refreshAll(); closeSheet();
+    }
+  })();
+}
+
+// ═══ ADD SCREEN ═══════════════════════════════════════════════════════════
+function pickType(el,type){
+  hSel();
+  newTaskType = type;
+  document.querySelectorAll('.type-opt').forEach(x=>x.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function pickDate(el,offset){
+  hSel();
+  newTaskOffset = offset;
+  document.querySelectorAll('.qd').forEach(x=>x.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function saveTask(){
+  const text = document.getElementById('in-text').value.trim();
+  if(!text){ toast('Введи текст задачи'); haptic('heavy'); return; }
+  haptic('medium');
+
+  let due = null;
+  if(newTaskOffset !== null){
+    const d = new Date();
+    d.setDate(d.getDate() + newTaskOffset);
+    const [h,m] = document.getElementById('in-time').value.split(':');
+    d.setHours(+h||12, +m||0, 0, 0);
+    due = d.toISOString().slice(0,16);
+  }
+
+  const newTask = {
+    id: Date.now(),
+    text, type:newTaskType, due, done:0
+  };
+  tasks.unshift(newTask);
+
+  // Sync to backend
+  const params = new URLSearchParams(location.search);
+  const uid = params.get('uid'), api = params.get('api');
+  if(uid && api){
+    fetch(`${api}/tasks`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({uid, ...newTask})
+    }).catch(()=>{});
+  }
+
+  // Reset form
+  document.getElementById('in-text').value='';
+  document.querySelectorAll('.qd').forEach(x=>x.classList.remove('active'));
+  document.querySelector('.qd:last-child').classList.add('active');
+  newTaskOffset = null;
+
+  hNotify('success');
+  toast('✨ Задача добавлена');
+  setTimeout(()=>nav('home'),400);
+}
+
+// ═══ TOAST ═════════════════════════════════════════════════════════════════
+let toastT;
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(()=>el.classList.remove('show'), 2600);
+}
+
+// ═══ PARTICLE BG ═══════════════════════════════════════════════════════════
+(function(){
+  const c=document.getElementById('bg'),ctx=c.getContext('2d');
+  let w,h,pts;
+  function resize(){
+    w=c.width=innerWidth; h=c.height=innerHeight;
+    pts=Array.from({length:30},()=>({
+      x:Math.random()*w,y:Math.random()*h,
+      vx:(Math.random()-.5)*.25,vy:(Math.random()-.5)*.25,
+      r:Math.random()*1.4+.4,
+      hue:Math.random()<.55?260+Math.random()*30:215+Math.random()*25
+    }));
+  }
+  function draw(){
+    ctx.clearRect(0,0,w,h);
+    for(const p of pts){
+      p.x+=p.vx;p.y+=p.vy;
+      if(p.x<0||p.x>w)p.vx*=-1;
+      if(p.y<0||p.y>h)p.vy*=-1;
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=`hsla(${p.hue},85%,72%,.4)`;
+      ctx.fill();
+    }
+    for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){
+      const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.hypot(dx,dy);
+      if(d<130){
+        ctx.beginPath();
+        ctx.moveTo(pts[i].x,pts[i].y);
+        ctx.lineTo(pts[j].x,pts[j].y);
+        ctx.strokeStyle=`rgba(167,139,250,${.1*(1-d/130)})`;
+        ctx.lineWidth=.5;
+        ctx.stroke();
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+  resize(); addEventListener('resize',resize); draw();
+})();
+
+// ═══ INIT ══════════════════════════════════════════════════════════════════
+(async()=>{
+  await loadTasks();
+  renderHome();
+  // Default select "Без даты"
+})();
+</script>
+</body>
+</html>

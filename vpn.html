@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Kanye VPN</title>
+<style>
+/* ─── RESET & VARIABLES ─────────────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --p1:#7c3aed;--p2:#4f46e5;--p3:#3b82f6;
+  --g1:linear-gradient(135deg,#1a0533 0%,#0d1b3e 50%,#070d1f 100%);
+  --glass:rgba(255,255,255,.06);--glass-border:rgba(255,255,255,.12);
+  --text:#f0f0ff;--muted:rgba(240,240,255,.5);--subtle:rgba(240,240,255,.25);
+  --card-bg:rgba(20,10,50,.6);
+  --radius:18px;--radius-sm:12px;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+html,body{
+  height:100%;width:100%;overflow:hidden;
+  background:var(--g1);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  font-size:15px;line-height:1.4;
+}
+
+/* ─── PARTICLE CANVAS ───────────────────────────────────────────────────── */
+#bg{position:fixed;inset:0;z-index:0;pointer-events:none}
+
+/* ─── SCREENS ───────────────────────────────────────────────────────────── */
+.screen{
+  position:fixed;inset:0;z-index:1;
+  display:flex;flex-direction:column;
+  padding-top:calc(var(--safe-top) + 12px);
+  padding-bottom:calc(var(--safe-bot) + 80px);
+  overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  opacity:0;pointer-events:none;
+  transform:translateX(40px);
+  transition:opacity .28s ease,transform .28s ease;
+}
+.screen.active{opacity:1;pointer-events:all;transform:none}
+.screen.exit{opacity:0;transform:translateX(-40px)}
+
+/* ─── SCROLLBAR ─────────────────────────────────────────────────────────── */
+.screen::-webkit-scrollbar{width:3px}
+.screen::-webkit-scrollbar-track{background:transparent}
+.screen::-webkit-scrollbar-thumb{background:var(--p1);border-radius:2px}
+
+/* ─── GLASS CARD ────────────────────────────────────────────────────────── */
+.card{
+  background:var(--glass);
+  border:1px solid var(--glass-border);
+  border-radius:var(--radius);
+  backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+}
+
+/* ─── HEADER (screen-level) ─────────────────────────────────────────────── */
+.screen-title{
+  font-size:20px;font-weight:700;letter-spacing:-.3px;
+  padding:0 20px 16px;
+}
+
+/* ══════════════════════ HOME SCREEN ════════════════════════════════════════ */
+#home{padding-left:0;padding-right:0}
+
+/* Hero */
+.hero{
+  display:flex;flex-direction:column;align-items:center;
+  padding:28px 20px 24px;text-align:center;
+}
+.logo-ring{
+  width:88px;height:88px;border-radius:50%;
+  background:linear-gradient(135deg,var(--p1),var(--p3));
+  display:flex;align-items:center;justify-content:center;
+  font-size:36px;margin-bottom:16px;
+  box-shadow:0 0 40px rgba(124,58,237,.5),0 0 80px rgba(79,70,229,.25);
+  animation:pulse 3s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{box-shadow:0 0 40px rgba(124,58,237,.5),0 0 80px rgba(79,70,229,.2)}
+  50%{box-shadow:0 0 60px rgba(124,58,237,.7),0 0 100px rgba(79,70,229,.4)}}
+.hero h1{font-size:24px;font-weight:800;letter-spacing:-.5px;
+  background:linear-gradient(90deg,#c4b5fd,#93c5fd);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{margin-top:6px;color:var(--muted);font-size:13px;font-style:italic}
+
+/* Balance card */
+.balance-card{
+  margin:0 16px 16px;
+  padding:20px 22px;
+  background:linear-gradient(135deg,rgba(124,58,237,.3),rgba(59,130,246,.2));
+  border:1px solid rgba(196,181,253,.2);
+  border-radius:var(--radius);
+}
+.balance-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.balance-amount{font-size:36px;font-weight:800;letter-spacing:-1px;
+  background:linear-gradient(90deg,#e9d5ff,#bfdbfe);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.balance-sub{margin-top:4px;font-size:12px;color:var(--muted)}
+.topup-btn{
+  margin-top:14px;
+  background:linear-gradient(135deg,var(--p1),var(--p2));
+  border:none;color:#fff;font-size:13px;font-weight:600;
+  padding:9px 20px;border-radius:30px;cursor:pointer;
+  box-shadow:0 4px 15px rgba(124,58,237,.4);
+  transition:transform .15s,box-shadow .15s;
+}
+.topup-btn:active{transform:scale(.96);box-shadow:0 2px 8px rgba(124,58,237,.3)}
+
+/* Action grid */
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 16px 20px}
+.action-btn{
+  padding:18px 14px;border-radius:var(--radius);cursor:pointer;
+  background:var(--glass);border:1px solid var(--glass-border);
+  display:flex;flex-direction:column;align-items:flex-start;gap:10px;
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  transition:transform .15s,background .15s;
+  -webkit-user-select:none;user-select:none;
+}
+.action-btn:active{transform:scale(.97);background:rgba(255,255,255,.1)}
+.action-icon{
+  width:42px;height:42px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;font-size:20px;
+}
+.action-btn.buy .action-icon{background:linear-gradient(135deg,#7c3aed,#4f46e5)}
+.action-btn.subs .action-icon{background:linear-gradient(135deg,#4f46e5,#3b82f6)}
+.action-btn.support .action-icon{background:linear-gradient(135deg,#7c3aed,#9333ea)}
+.action-btn.refer .action-icon{background:linear-gradient(135deg,#3b82f6,#0ea5e9)}
+.action-label{font-size:13px;font-weight:600}
+.action-sub{font-size:11px;color:var(--muted)}
+
+/* Status strip */
+.status-strip{
+  margin:0 16px 16px;
+  padding:14px 18px;
+  border-radius:var(--radius-sm);
+  display:flex;align-items:center;gap:12px;
+  background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);
+}
+.status-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;
+  box-shadow:0 0 8px #22c55e;animation:blink 2s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+.status-text{font-size:13px;color:#86efac}
+
+/* ══════════════════════ BUY SCREEN ═════════════════════════════════════════ */
+#buy{padding:0}
+.plan-header{padding:20px 20px 8px}
+.plan-header h2{font-size:20px;font-weight:700}
+.plan-header p{font-size:13px;color:var(--muted);margin-top:4px}
+
+.plans{display:flex;flex-direction:column;gap:10px;padding:12px 16px 16px}
+.plan{
+  padding:18px 20px;border-radius:var(--radius);
+  border:2px solid var(--glass-border);
+  background:var(--card-bg);
+  cursor:pointer;
+  transition:border-color .2s,background .2s,transform .15s;
+  position:relative;overflow:hidden;
+}
+.plan::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(59,130,246,.08));
+  opacity:0;transition:opacity .2s;
+}
+.plan.selected{border-color:var(--p1);background:rgba(124,58,237,.15)}
+.plan.selected::before{opacity:1}
+.plan.popular{border-color:rgba(196,181,253,.35)}
+.popular-badge{
+  position:absolute;top:0;right:0;
+  background:linear-gradient(135deg,var(--p1),var(--p2));
+  font-size:10px;font-weight:700;color:#fff;
+  padding:4px 12px;border-radius:0 var(--radius) 0 10px;
+  letter-spacing:.05em;text-transform:uppercase;
+}
+.plan:active{transform:scale(.99)}
+.plan-row{display:flex;align-items:center;justify-content:space-between}
+.plan-name{font-size:16px;font-weight:700}
+.plan-price{font-size:20px;font-weight:800;
+  background:linear-gradient(90deg,#c4b5fd,#93c5fd);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.plan-per{font-size:11px;color:var(--muted);margin-top:2px;text-align:right}
+.plan-features{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px}
+.feat{
+  font-size:11px;color:#c4b5fd;
+  background:rgba(124,58,237,.18);border:1px solid rgba(196,181,253,.15);
+  padding:3px 10px;border-radius:20px;
+}
+.plan-save{
+  margin-top:8px;font-size:11px;color:#86efac;font-weight:600;
+}
+
+.pay-info{
+  margin:0 16px 16px;padding:14px 16px;border-radius:var(--radius-sm);
+  background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);
+  font-size:12px;color:var(--muted);
+  display:flex;align-items:flex-start;gap:8px;
+}
+
+/* ══════════════════════ SUBSCRIPTIONS SCREEN ───────────────────────────── */
+#subs{padding:0}
+
+.subs-header{padding:20px 20px 16px}
+.subs-header h2{font-size:20px;font-weight:700}
+
+.no-subs{
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:60px 32px;text-align:center;gap:12px;
+}
+.no-subs .icon{font-size:48px;margin-bottom:4px}
+.no-subs h3{font-size:17px;font-weight:700}
+.no-subs p{font-size:13px;color:var(--muted)}
+
+.sub-card{
+  margin:0 16px 12px;
+  padding:18px 20px;border-radius:var(--radius);
+  background:linear-gradient(135deg,rgba(124,58,237,.2),rgba(59,130,246,.12));
+  border:1px solid rgba(196,181,253,.2);
+}
+.sub-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.sub-name{font-size:15px;font-weight:700}
+.sub-status{
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  padding:3px 10px;border-radius:20px;
+}
+.sub-status.active{background:rgba(34,197,94,.15);color:#86efac;border:1px solid rgba(34,197,94,.25)}
+.sub-status.expired{background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.25)}
+
+.sub-details{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.sub-detail{background:rgba(0,0,0,.25);border-radius:10px;padding:10px 12px}
+.sub-detail-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+.sub-detail-val{font-size:14px;font-weight:600}
+
+.sub-actions{display:flex;gap:8px}
+.btn-outline{
+  flex:1;padding:10px;border-radius:10px;font-size:13px;font-weight:600;
+  border:1px solid var(--glass-border);background:var(--glass);color:var(--text);
+  cursor:pointer;text-align:center;transition:background .15s;
+}
+.btn-outline:active{background:rgba(255,255,255,.12)}
+.btn-primary{
+  flex:1;padding:10px;border-radius:10px;font-size:13px;font-weight:600;
+  border:none;background:linear-gradient(135deg,var(--p1),var(--p2));color:#fff;
+  cursor:pointer;text-align:center;transition:opacity .15s;
+  box-shadow:0 4px 15px rgba(124,58,237,.35);
+}
+.btn-primary:active{opacity:.85}
+
+/* ══════════════════════ SUPPORT SCREEN ─────────────────────────────────── */
+#support-screen{padding:0}
+.support-header{padding:20px 20px 16px}
+.support-header h2{font-size:20px;font-weight:700}
+.support-header p{font-size:13px;color:var(--muted);margin-top:4px}
+
+.support-options{display:flex;flex-direction:column;gap:10px;padding:0 16px 16px}
+.support-item{
+  padding:16px 18px;border-radius:var(--radius-sm);
+  background:var(--glass);border:1px solid var(--glass-border);
+  display:flex;align-items:center;gap:14px;cursor:pointer;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  transition:background .15s;
+}
+.support-item:active{background:rgba(255,255,255,.1)}
+.support-item-icon{
+  width:44px;height:44px;border-radius:12px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:20px;
+}
+.si-tg .support-item-icon{background:linear-gradient(135deg,#2AABEE,#229ED9)}
+.si-email .support-item-icon{background:linear-gradient(135deg,#7c3aed,#4f46e5)}
+.si-faq .support-item-icon{background:linear-gradient(135deg,#4f46e5,#3b82f6)}
+.support-item-body{flex:1}
+.support-item-title{font-size:14px;font-weight:600}
+.support-item-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.support-item-arrow{color:var(--subtle);font-size:16px}
+
+.faq{display:flex;flex-direction:column;gap:6px;padding:0 16px 20px}
+.faq-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:8px 0 6px}
+.faq-item{
+  background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--radius-sm);
+  overflow:hidden;cursor:pointer;
+}
+.faq-q{
+  padding:14px 16px;font-size:13px;font-weight:500;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+.faq-arrow{font-size:12px;color:var(--muted);transition:transform .2s;flex-shrink:0}
+.faq-item.open .faq-arrow{transform:rotate(180deg)}
+.faq-a{
+  max-height:0;overflow:hidden;
+  font-size:12px;color:var(--muted);line-height:1.6;
+  transition:max-height .25s ease,padding .25s;
+  padding:0 16px;
+}
+.faq-item.open .faq-a{max-height:200px;padding:0 16px 14px}
+
+/* ─── BOTTOM NAV ─────────────────────────────────────────────────────────── */
+.bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:10;
+  padding:8px 12px calc(8px + var(--safe-bot));
+  background:rgba(10,5,30,.85);
+  border-top:1px solid var(--glass-border);
+  backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);
+  display:flex;justify-content:space-around;align-items:center;
+}
+.nav-item{
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  cursor:pointer;padding:4px 14px;border-radius:12px;
+  transition:background .15s;flex:1;
+  -webkit-user-select:none;user-select:none;
+}
+.nav-item:active{background:rgba(255,255,255,.08)}
+.nav-icon{font-size:20px;line-height:1;filter:grayscale(1) opacity(.5);transition:filter .2s,transform .2s}
+.nav-label{font-size:10px;color:var(--subtle);font-weight:500;transition:color .2s}
+.nav-item.active .nav-icon{filter:none;transform:scale(1.12)}
+.nav-item.active .nav-label{color:#c4b5fd}
+
+/* ─── TOAST ─────────────────────────────────────────────────────────────── */
+.toast{
+  position:fixed;top:calc(var(--safe-top) + 16px);left:50%;z-index:999;
+  transform:translateX(-50%) translateY(-80px);
+  background:rgba(30,20,60,.95);border:1px solid var(--glass-border);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  color:var(--text);font-size:13px;font-weight:500;padding:11px 20px;
+  border-radius:30px;white-space:nowrap;
+  box-shadow:0 8px 32px rgba(0,0,0,.4);
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1);
+}
+.toast.show{transform:translateX(-50%) translateY(0)}
+
+/* ─── SHIMMER LOADING ────────────────────────────────────────────────────── */
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+.shimmer{
+  background:linear-gradient(90deg,rgba(255,255,255,.05) 25%,rgba(255,255,255,.1) 50%,rgba(255,255,255,.05) 75%);
+  background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px;
+}
+</style>
+</head>
+<body>
+
+<canvas id="bg"></canvas>
+
+<!-- ══ HOME ══════════════════════════════════════════════════════════════ -->
+<div class="screen active" id="home">
+  <div class="hero">
+    <div class="logo-ring">🔐</div>
+    <h1>Kanye VPN</h1>
+    <p>— Обойдём списки чернее самого Канье</p>
+  </div>
+
+  <div class="status-strip">
+    <div class="status-dot"></div>
+    <span class="status-text">Сервис работает · 99.9% uptime</span>
+  </div>
+
+  <div class="balance-card card">
+    <div class="balance-label">Твой баланс</div>
+    <div class="balance-amount" id="balance-display">0 ₽</div>
+    <div class="balance-sub">Пополни баланс для покупки подписки</div>
+    <button class="topup-btn" onclick="handleTopup()">+ Пополнить</button>
+  </div>
+
+  <div class="actions">
+    <div class="action-btn buy" onclick="nav('buy')">
+      <div class="action-icon">🛒</div>
+      <div>
+        <div class="action-label">Купить</div>
+        <div class="action-sub">Тарифы от 99₽</div>
+      </div>
+    </div>
+    <div class="action-btn subs" onclick="nav('subs')">
+      <div class="action-icon">🗝️</div>
+      <div>
+        <div class="action-label">Подписки</div>
+        <div class="action-sub">Мои ключи</div>
+      </div>
+    </div>
+    <div class="action-btn support" onclick="nav('support-screen')">
+      <div class="action-icon">💬</div>
+      <div>
+        <div class="action-label">Поддержка</div>
+        <div class="action-sub">Пишем быстро</div>
+      </div>
+    </div>
+    <div class="action-btn refer" onclick="handleReferral()">
+      <div class="action-icon">🎁</div>
+      <div>
+        <div class="action-label">Реферал</div>
+        <div class="action-sub">+50₽ за друга</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ BUY ════════════════════════════════════════════════════════════════ -->
+<div class="screen" id="buy">
+  <div class="plan-header">
+    <h2>Выбери тариф</h2>
+    <p>До 3 устройств · WireGuard · Без логов</p>
+  </div>
+
+  <div class="plans">
+    <div class="plan" id="plan-1" onclick="selectPlan(1,99,'1 месяц')">
+      <div class="plan-row">
+        <div class="plan-name">1 месяц</div>
+        <div>
+          <div class="plan-price">99 ₽</div>
+          <div class="plan-per">/ месяц</div>
+        </div>
+      </div>
+      <div class="plan-features">
+        <span class="feat">3 устройства</span>
+        <span class="feat">WireGuard</span>
+        <span class="feat">10 стран</span>
+      </div>
+    </div>
+
+    <div class="plan popular" id="plan-3" onclick="selectPlan(3,249,'3 месяца')">
+      <div class="popular-badge">Популярный</div>
+      <div class="plan-row">
+        <div class="plan-name">3 месяца</div>
+        <div>
+          <div class="plan-price">249 ₽</div>
+          <div class="plan-per">83 ₽ / месяц</div>
+        </div>
+      </div>
+      <div class="plan-features">
+        <span class="feat">3 устройства</span>
+        <span class="feat">WireGuard</span>
+        <span class="feat">10 стран</span>
+        <span class="feat">Приоритет</span>
+      </div>
+      <div class="plan-save">Экономия 16%</div>
+    </div>
+
+    <div class="plan" id="plan-6" onclick="selectPlan(6,449,'6 месяцев')">
+      <div class="plan-row">
+        <div class="plan-name">6 месяцев</div>
+        <div>
+          <div class="plan-price">449 ₽</div>
+          <div class="plan-per">75 ₽ / месяц</div>
+        </div>
+      </div>
+      <div class="plan-features">
+        <span class="feat">3 устройства</span>
+        <span class="feat">WireGuard</span>
+        <span class="feat">10 стран</span>
+        <span class="feat">Приоритет</span>
+      </div>
+      <div class="plan-save">Экономия 25%</div>
+    </div>
+
+    <div class="plan" id="plan-12" onclick="selectPlan(12,799,'1 год')">
+      <div class="plan-row">
+        <div class="plan-name">1 год</div>
+        <div>
+          <div class="plan-price">799 ₽</div>
+          <div class="plan-per">67 ₽ / месяц</div>
+        </div>
+      </div>
+      <div class="plan-features">
+        <span class="feat">3 устройства</span>
+        <span class="feat">WireGuard</span>
+        <span class="feat">10 стран</span>
+        <span class="feat">Приоритет</span>
+        <span class="feat">+1 устройство</span>
+      </div>
+      <div class="plan-save">Экономия 33%</div>
+    </div>
+  </div>
+
+  <div class="pay-info">
+    <span>ℹ️</span>
+    <span>Оплата списывается с баланса. Доступ активируется мгновенно после оплаты.</span>
+  </div>
+</div>
+
+<!-- ══ SUBSCRIPTIONS ══════════════════════════════════════════════════════ -->
+<div class="screen" id="subs">
+  <div class="subs-header"><h2>Мои подписки</h2></div>
+  <div id="subs-content">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- ══ SUPPORT ════════════════════════════════════════════════════════════ -->
+<div class="screen" id="support-screen">
+  <div class="support-header">
+    <h2>Поддержка</h2>
+    <p>Ответим в течение нескольких минут</p>
+  </div>
+
+  <div class="support-options">
+    <div class="support-item si-tg" onclick="openTgSupport()">
+      <div class="support-item-icon">✈️</div>
+      <div class="support-item-body">
+        <div class="support-item-title">Telegram чат</div>
+        <div class="support-item-sub">@kanye_vpn_support</div>
+      </div>
+      <div class="support-item-arrow">›</div>
+    </div>
+    <div class="support-item si-email" onclick="toast('📧 Открываем почту...')">
+      <div class="support-item-icon">📧</div>
+      <div class="support-item-body">
+        <div class="support-item-title">Email</div>
+        <div class="support-item-sub">support@kanyevpn.com</div>
+      </div>
+      <div class="support-item-arrow">›</div>
+    </div>
+    <div class="support-item si-faq" onclick="scrollToFaq()">
+      <div class="support-item-icon">📚</div>
+      <div class="support-item-body">
+        <div class="support-item-title">FAQ</div>
+        <div class="support-item-sub">Частые вопросы</div>
+      </div>
+      <div class="support-item-arrow">›</div>
+    </div>
+  </div>
+
+  <div class="faq" id="faq-section">
+    <div class="faq-title">Частые вопросы</div>
+
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">Как подключить VPN? <span class="faq-arrow">▾</span></div>
+      <div class="faq-a">После покупки тебе придёт конфиг-файл. Установи приложение WireGuard, импортируй файл — и готово. Работает на iOS, Android, Windows, Mac.</div>
+    </div>
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">Сколько устройств можно подключить? <span class="faq-arrow">▾</span></div>
+      <div class="faq-a">В базовых тарифах — 3 устройства одновременно. В годовом тарифе — 4 устройства.</div>
+    </div>
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">Ведёте ли вы логи? <span class="faq-arrow">▾</span></div>
+      <div class="faq-a">Нет. Мы не храним логи активности, DNS-запросы или историю сессий. Zero-log политика.</div>
+    </div>
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">Какие страны доступны? <span class="faq-arrow">▾</span></div>
+      <div class="faq-a">10 локаций: Нидерланды, Германия, Финляндия, США, Великобритания, Япония, Сингапур, Польша, Франция, Латвия.</div>
+    </div>
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">Можно ли вернуть деньги? <span class="faq-arrow">▾</span></div>
+      <div class="faq-a">Да, в течение 3 дней с момента покупки при первом обращении. Напиши в поддержку.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ BOTTOM NAV ═════════════════════════════════════════════════════════ -->
+<nav class="bottom-nav">
+  <div class="nav-item active" id="nav-home" onclick="nav('home')">
+    <div class="nav-icon">🏠</div>
+    <div class="nav-label">Главная</div>
+  </div>
+  <div class="nav-item" id="nav-buy" onclick="nav('buy')">
+    <div class="nav-icon">🛒</div>
+    <div class="nav-label">Купить</div>
+  </div>
+  <div class="nav-item" id="nav-subs" onclick="nav('subs')">
+    <div class="nav-icon">🗝️</div>
+    <div class="nav-label">Подписки</div>
+  </div>
+  <div class="nav-item" id="nav-support-screen" onclick="nav('support-screen')">
+    <div class="nav-icon">💬</div>
+    <div class="nav-label">Поддержка</div>
+  </div>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Telegram SDK ────────────────────────────────────────────────────────────
+const tg = window.Telegram?.WebApp;
+if(tg){
+  tg.ready();
+  tg.expand();
+  tg.setHeaderColor('#0d1b3e');
+  tg.setBackgroundColor('#0f0f1a');
+}
+const haptic = (type='light') => tg?.HapticFeedback?.impactOccurred(type);
+const hapticSel = () => tg?.HapticFeedback?.selectionChanged();
+
+// ── State ───────────────────────────────────────────────────────────────────
+let currentScreen = 'home';
+let selectedPlanId = null, selectedPlanPrice = 0, selectedPlanName = '';
+let balance = 0;
+
+// Demo subscriptions (in production, fetch from bot API)
+const demoSubs = [];  // empty = no active subs
+// Uncomment to demo an active subscription:
+// const demoSubs = [{name:'3 месяца', status:'active', expires:'15 мая 2026', devices:'3/3', key:'wg_abc123'}];
+
+// ── Navigation ──────────────────────────────────────────────────────────────
+function nav(id){
+  if(id === currentScreen) return;
+  hapticSel();
+  document.getElementById(currentScreen).classList.remove('active');
+  document.getElementById(currentScreen).classList.add('exit');
+  setTimeout(()=>document.getElementById(currentScreen.replace(currentScreen,currentScreen)).classList.remove('exit'), 300);
+
+  const prev = currentScreen;
+  currentScreen = id;
+  const el = document.getElementById(id);
+  el.classList.add('active');
+  setTimeout(()=>document.getElementById(prev).classList.remove('exit'),300);
+
+  // Update nav active state
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const navEl = document.getElementById('nav-'+id);
+  if(navEl) navEl.classList.add('active');
+
+  // Back button
+  if(id !== 'home'){ tg?.BackButton?.show(); tg?.BackButton?.onClick(()=>nav('home')); }
+  else tg?.BackButton?.hide();
+
+  // MainButton
+  if(id === 'buy' && selectedPlanId){ showMainBtn(); }
+  else tg?.MainButton?.hide();
+
+  if(id === 'subs') renderSubs();
+}
+
+// ── Plan selection ──────────────────────────────────────────────────────────
+function selectPlan(months, price, name){
+  haptic('medium');
+  document.querySelectorAll('.plan').forEach(p=>p.classList.remove('selected'));
+  document.getElementById('plan-'+months).classList.add('selected');
+  selectedPlanId = months; selectedPlanPrice = price; selectedPlanName = name;
+  showMainBtn();
+}
+
+function showMainBtn(){
+  if(!tg) return;
+  tg.MainButton.setText(`Купить — ${selectedPlanPrice} ₽`);
+  tg.MainButton.color = '#7c3aed';
+  tg.MainButton.textColor = '#ffffff';
+  tg.MainButton.show();
+  tg.MainButton.onClick(handlePurchase);
+}
+
+// ── Purchase ────────────────────────────────────────────────────────────────
+function handlePurchase(){
+  if(!selectedPlanId) return;
+  haptic('heavy');
+  if(balance < selectedPlanPrice){
+    tg?.showPopup({
+      title:'Недостаточно средств',
+      message:`Нужно ${selectedPlanPrice}₽, на балансе ${balance}₽. Пополни баланс.`,
+      buttons:[{type:'default',text:'Пополнить',id:'topup'},{type:'cancel'}]
+    }, (btn)=>{ if(btn==='topup') handleTopup(); });
+    return;
+  }
+  tg?.showPopup({
+    title:`Подтвердить оплату`,
+    message:`Купить «${selectedPlanName}» за ${selectedPlanPrice}₽?`,
+    buttons:[{type:'destructive',text:'Оплатить',id:'confirm'},{type:'cancel'}]
+  },(btn)=>{ if(btn==='confirm'){ processPurchase(); } });
+}
+
+function processPurchase(){
+  haptic('heavy');
+  balance -= selectedPlanPrice;
+  document.getElementById('balance-display').textContent = balance+' ₽';
+  tg?.MainButton?.hide();
+  toast('✅ Подписка активирована!');
+  setTimeout(()=>nav('subs'), 1200);
+}
+
+// ── Balance top-up ──────────────────────────────────────────────────────────
+function handleTopup(){
+  haptic();
+  tg?.showPopup({
+    title:'Пополнение баланса',
+    message:'Выбери сумму пополнения',
+    buttons:[
+      {type:'default',text:'100 ₽',id:'100'},
+      {type:'default',text:'300 ₽',id:'300'},
+      {type:'default',text:'500 ₽',id:'500'},
+      {type:'cancel',text:'Отмена'}
+    ]
+  },(id)=>{
+    if(!id) return;
+    balance += parseInt(id);
+    document.getElementById('balance-display').textContent = balance+' ₽';
+    haptic('medium');
+    toast(`+${id} ₽ зачислено на баланс`);
+  });
+}
+
+// ── Referral ────────────────────────────────────────────────────────────────
+function handleReferral(){
+  haptic();
+  tg?.showPopup({
+    title:'Реферальная программа',
+    message:'Приглашай друзей и получай 50₽ за каждого. Поделись своей ссылкой:',
+    buttons:[{type:'default',text:'Скопировать ссылку',id:'copy'},{type:'cancel'}]
+  },(btn)=>{ if(btn==='copy'){ toast('🔗 Ссылка скопирована!'); haptic('medium'); }});
+}
+
+// ── Subscriptions ────────────────────────────────────────────────────────────
+function renderSubs(){
+  const el = document.getElementById('subs-content');
+  if(!demoSubs.length){
+    el.innerHTML=`<div class="no-subs">
+      <div class="icon">🔑</div>
+      <h3>Нет активных подписок</h3>
+      <p>Купи подписку и получи мгновенный доступ к VPN</p>
+      <button class="btn-primary" style="margin-top:16px;padding:12px 28px;border-radius:14px;font-size:14px" onclick="nav('buy')">Купить подписку</button>
+    </div>`;
+    return;
+  }
+  el.innerHTML = demoSubs.map(s=>`
+    <div class="sub-card">
+      <div class="sub-card-head">
+        <div class="sub-name">${s.name}</div>
+        <div class="sub-status ${s.status}">${s.status==='active'?'Активна':'Истекла'}</div>
+      </div>
+      <div class="sub-details">
+        <div class="sub-detail"><div class="sub-detail-label">Истекает</div><div class="sub-detail-val">${s.expires}</div></div>
+        <div class="sub-detail"><div class="sub-detail-label">Устройства</div><div class="sub-detail-val">${s.devices}</div></div>
+      </div>
+      <div class="sub-actions">
+        <button class="btn-outline" onclick="toast('📥 Конфиг скачан!')">⬇ Конфиг</button>
+        <button class="btn-outline" onclick="showQR()">📱 QR-код</button>
+        <button class="btn-primary" onclick="nav('buy')">Продлить</button>
+      </div>
+    </div>`).join('');
+}
+
+function showQR(){
+  haptic('medium');
+  tg?.showPopup({title:'QR-код',message:'Открой WireGuard → Import from QR, наведи камеру на код.',buttons:[{type:'close'}]});
+}
+
+// ── Support ─────────────────────────────────────────────────────────────────
+function openTgSupport(){
+  haptic();
+  tg?.openTelegramLink?.('https://t.me/kanye_vpn_support') || window.open('https://t.me/kanye_vpn_support','_blank');
+}
+
+function scrollToFaq(){
+  haptic();
+  document.getElementById('faq-section').scrollIntoView({behavior:'smooth'});
+}
+
+function toggleFaq(el){
+  hapticSel();
+  el.classList.toggle('open');
+}
+
+// ── Toast ───────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.classList.remove('show'), 2800);
+}
+
+// ── Particle background ─────────────────────────────────────────────────────
+(function(){
+  const c = document.getElementById('bg');
+  const ctx = c.getContext('2d');
+  let w,h,pts;
+
+  function resize(){
+    w = c.width  = window.innerWidth;
+    h = c.height = window.innerHeight;
+    pts = Array.from({length:38},()=>({
+      x:Math.random()*w, y:Math.random()*h,
+      vx:(Math.random()-.5)*.3, vy:(Math.random()-.5)*.3,
+      r:Math.random()*1.5+.5,
+      hue: Math.random()<.6 ? 260+Math.random()*30 : 210+Math.random()*30
+    }));
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,w,h);
+    for(const p of pts){
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.x<0||p.x>w) p.vx*=-1;
+      if(p.y<0||p.y>h) p.vy*=-1;
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=`hsla(${p.hue},80%,70%,.45)`;
+      ctx.fill();
+    }
+    // Connections
+    for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
+      const dx=pts[i].x-pts[j].x, dy=pts[i].y-pts[j].y;
+      const d=Math.hypot(dx,dy);
+      if(d<120){
+        ctx.beginPath();
+        ctx.moveTo(pts[i].x,pts[i].y);
+        ctx.lineTo(pts[j].x,pts[j].y);
+        ctx.strokeStyle=`rgba(167,139,250,${.12*(1-d/120)})`;
+        ctx.lineWidth=.6;
+        ctx.stroke();
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+
+  resize();
+  window.addEventListener('resize',resize);
+  draw();
+})();
+</script>
+</body>
+</html>
